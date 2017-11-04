@@ -29,7 +29,7 @@
   
 	<VRSetups>
 		<Desktop hostType="VRStandAlone">
-		  <Fake1 inputdeviceType="VRFakeTrackerDevice">
+		  <Fake1 inputdeviceType="VRFakeHandTrackerDevice">
 		    <TrackerName>FakeTracker1</TrackerName>
 		    <ToggleOnOffEvent>Kbd1_Down</ToggleOnOffEvent>
 		    <XYTranslationScale>1.0</XYTranslationScale>
@@ -37,7 +37,7 @@
 		    <RotationScale>1.0</RotationScale>
 		  </Fake1>
 
-		  <Fake2 inputdeviceType="VRFakeTrackerDevice">
+		  <Fake2 inputdeviceType="VRFakeHandTrackerDevice">
 		    <TrackerName>FakeTracker2</TrackerName>
 		    <ToggleOnOffEvent>Kbd2_Down</ToggleOnOffEvent>
 		    <XYTranslationScale>1.0</XYTranslationScale>

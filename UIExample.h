@@ -21,6 +21,8 @@
 #include <api/MinVR.h>
 using namespace MinVR;
 
+#include "QuickShapes.h"
+
 #include <glm/glm.hpp>
 #include <vector>
 #include <set>
@@ -41,21 +43,27 @@ public:
     
     /** The constructor passes argc, argv, and a MinVR config file on to VRApp.
      */
-    UIExample(int argc, char** argv, const std::string& configFile);
+    UIExample(int argc, char** argv);
     virtual ~UIExample();
 
-    /** This is the critical function to override in a MinVR app that has an
-        interesting user interface.
-     */
-    void onVREvent(const VREvent &event);
-
-    /** Override this function to initialize graphics (load textures, etc.)
-     */
-    void onVRRenderGraphicsContext(const VRGraphicsState &renderState);
-
-    /** Override this function to actually draw the graphics each frame.
-     */
-    void onVRRenderGraphics(const VRGraphicsState &renderState);
+    
+    /** USER INTERFACE CALLBACKS **/
+    
+    virtual void onAnalogChange(const VRAnalogEvent &state);
+    
+    virtual void onButtonDown(const VRButtonEvent &state);
+    
+    virtual void onButtonUp(const VRButtonEvent &state);
+    
+    virtual void onTrackerMove(const VRTrackerEvent &state);
+    
+    
+    /** RENDERING CALLBACKS **/
+    
+    virtual void onRenderGraphicsScene(const VRGraphicsState& state);
+    
+    virtual void onRenderGraphicsContext(const VRGraphicsState& state);
+    
     
 private:
 
@@ -90,6 +98,8 @@ private:
         float color[3];
     };
     std::vector<PaintBlob> _paintBlobs;
+    
+    QuickShapes *_quickShapes;
 };
 
 

@@ -10,6 +10,7 @@ set(source_files
   main.cpp
   QuickShapes.cpp
   UIExample.cpp
+  glew.c
 )
 
 set(header_files

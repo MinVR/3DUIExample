@@ -17,34 +17,14 @@
 #include "UIExample.h"
 #include "QuickShapes.h"
 
-// OpenGL Headers
-#if defined(WIN32)
-#define NOMINMAX
-#include <windows.h>
-#include <GL/gl.h>
-#elif defined(__APPLE__)
-#define GL_GLEXT_PROTOTYPES
-#include <OpenGL/gl3.h>
-#include <OpenGL/glext.h>
-#else
-#define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-#endif
-
 #include <glm/gtc/type_ptr.hpp>
-
 
 #include <cmath>
 
-/**
-TODO:
- - combine shader utils and quick shapes in a single class
- **/
 
 
 
-UIExample::UIExample(int argc, char** argv, const std::string& configFile) :
-    VRApp(argc, argv, configFile),
+UIExample::UIExample(int argc, char** argv) : VRApp(argc, argv),
     _grabbing(false), _painting(false),
     _paintingToRoom(glm::mat4(1.0))
 {
@@ -66,36 +46,45 @@ UIExample::UIExample(int argc, char** argv, const std::string& configFile) :
 
     // ...
 
+    
+    _quickShapes = new QuickShapes;
 
 }
 
 UIExample::~UIExample()
 {
-    QuickShapes::freeGPUMemory();
+    delete _quickShapes;
 }
 
 
-void UIExample::onVREvent(const VREvent &event)
-{
-    // When working with MinVR, this is a very useful printout for debugging
-    // input events.
-    event.print();
-    
-    
+void UIExample::onAnalogChange(const VRAnalogEvent &state) {
+
+}
+
+
+void UIExample::onButtonDown(const VRButtonEvent &event) {
     if (_paintOnEvents.find(event.getName()) != _paintOnEvents.end()) {
         _painting = true;
-    }
-    else if (_paintOffEvents.find(event.getName()) != _paintOffEvents.end()) {
-        _painting = false;
     }
     else if (_grabOnEvents.find(event.getName()) != _grabOnEvents.end()) {
         _grabbing = true;
     }
+}
+
+
+void UIExample::onButtonUp(const VRButtonEvent &event) {
+    if (_paintOffEvents.find(event.getName()) != _paintOffEvents.end()) {
+        _painting = false;
+    }
     else if (_grabOffEvents.find(event.getName()) != _grabOffEvents.end()) {
         _grabbing = false;
     }
-    else if (_rHandTrackerEvents.find(event.getName()) != _rHandTrackerEvents.end()) {
-        _rhand = glm::make_mat4(event.getDataAsFloatArray("Transform"));
+}
+
+
+void UIExample::onTrackerMove(const VRTrackerEvent &event) {
+    if (_rHandTrackerEvents.find(event.getName()) != _rHandTrackerEvents.end()) {
+        _rhand = glm::make_mat4(event.getTransform());
         if (_painting) {
             // Transform the right hand transform into "painting space"
             glm::mat4 roomToPainting = glm::inverse(_paintingToRoom);
@@ -125,7 +114,7 @@ void UIExample::onVREvent(const VREvent &event)
         }
     }
     else if (_lHandTrackerEvents.find(event.getName()) != _lHandTrackerEvents.end()) {
-        glm::mat4 newHand = glm::make_mat4(event.getDataAsFloatArray("Transform"));
+        glm::mat4 newHand = glm::make_mat4(event.getTransform());
         if (_grabbing) {
             // Update the paintingToRoom transform based upon the new transform
             // of the left hand relative to the last frame.
@@ -135,18 +124,26 @@ void UIExample::onVREvent(const VREvent &event)
     }
 }
 
+
     
-void UIExample::onVRRenderGraphicsContext(const VRGraphicsState &renderState) {
+void UIExample::onRenderGraphicsContext(const VRGraphicsState &renderState) {
     if (renderState.isInitialRenderCall()) {
+        glewExperimental = GL_TRUE;
+        GLenum err = glewInit();
+        if (GLEW_OK != err) {
+            std::cout << "Error initializing GLEW." << std::endl;
+        }
+        
         glEnable(GL_DEPTH_TEST);
         glClearDepth(1.0f);
         glDepthFunc(GL_LEQUAL);
         glClearColor(0.2, 0.2, 0.2, 1);
+        _quickShapes->init();
     }
 }
 
 
-void UIExample::onVRRenderGraphics(const VRGraphicsState &renderState) {
+void UIExample::onRenderGraphicsScene(const VRGraphicsState &renderState) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     
     // Draw a cursor for the left hand
@@ -156,11 +153,11 @@ void UIExample::onVRRenderGraphics(const VRGraphicsState &renderState) {
     scaleHandCursor[1].y = 0.25;
     scaleHandCursor[2].z = 0.25;
     glm::mat4 lHandScaled = _lhand * scaleHandCursor;
-    QuickShapes::drawCube(glm::value_ptr(lHandScaled), renderState.getViewMatrix(), renderState.getProjectionMatrix(), lcolor);
+    _quickShapes->drawCube(glm::value_ptr(lHandScaled), renderState.getViewMatrix(), renderState.getProjectionMatrix(), lcolor);
     
     // Draw a cursor for the right hand
     const float rcolor [] = {0.5, 0.5, 0.8};
-    QuickShapes::drawBrush(glm::value_ptr(_rhand), renderState.getViewMatrix(), renderState.getProjectionMatrix(), rcolor);
+    _quickShapes->drawBrush(glm::value_ptr(_rhand), renderState.getViewMatrix(), renderState.getProjectionMatrix(), rcolor);
     
     // Draw the "painting"
     for (int i=0; i<_paintBlobs.size(); i++) {
@@ -169,6 +166,6 @@ void UIExample::onVRRenderGraphics(const VRGraphicsState &renderState) {
         S[1].y = _paintBlobs[i].rad;;
         S[2].z = _paintBlobs[i].rad;;
         glm::mat4 M = _paintingToRoom * _paintBlobs[i].trans * S;
-        QuickShapes::drawSphere(glm::value_ptr(M), renderState.getViewMatrix(), renderState.getProjectionMatrix(), _paintBlobs[i].color);
+        _quickShapes->drawSphere(glm::value_ptr(M), renderState.getViewMatrix(), renderState.getProjectionMatrix(), _paintBlobs[i].color);
     }
 }

@@ -28,28 +28,6 @@
 #include <glm/gtc/type_ptr.hpp>
 
 
-
-float QuickShapes::s_lightPos[3]  = {0.0, 10.0, 0.0};
-float QuickShapes::s_lightAmb[3]  = {0.2, 0.2, 0.2};
-float QuickShapes::s_lightDiff[3] = {0.7, 0.7, 0.7};
-float QuickShapes::s_lightSpec[3] = {0.6, 0.6, 0.6};
-float QuickShapes::s_matSpec[3]   = {0.6, 0.6, 0.6};
-float QuickShapes::s_matShin      = 10.0;
-
-GLuint QuickShapes::s_cubeVAO = 0;
-GLuint QuickShapes::s_cubeVBO = 0;
-
-GLuint QuickShapes::s_cylVAO = 0;
-GLuint QuickShapes::s_cylVBO = 0;
-int QuickShapes::s_cylNVerts = 0;
-
-GLuint QuickShapes::s_sphVAO = 0;
-GLuint QuickShapes::s_sphVBO = 0;
-int QuickShapes::s_sphNVerts = 0;
-
-GLuint QuickShapes::s_brushVAO = 0;
-GLuint QuickShapes::s_brushVBO = 0;
-
 #define PI 3.14159265359
 #define TWOPI 6.28318530718
 
@@ -62,6 +40,8 @@ GLuint QuickShapes::s_brushVBO = 0;
 class ShaderUtils {
 public:
 
+    static void init();
+    
     /** Call this before rendering some geometry to "turn on" a simple Phong shader.
 	    (Phong = per-fragment lighting) */
     static void startSimplePhongShader(const float *modelMatrix,
@@ -102,6 +82,7 @@ GLuint ShaderUtils::s_phongFS = 0;
 GLuint ShaderUtils::s_phongProgram = 0;
 
 
+
 GLuint ShaderUtils::compileShader(const std::string& shaderText, GLuint shaderType) {
     const char* source = shaderText.c_str();
     int length = shaderText.size();
@@ -138,6 +119,72 @@ void ShaderUtils::linkShaderProgram(GLuint shaderProgram) {
 }
 
 
+void ShaderUtils::init() {
+    std::string vertexShader =
+    "#version 330 \n"
+    "layout(location = 0) in vec3 position; \n"
+    "layout(location = 1) in vec3 normal; \n"
+    "\n"
+    "uniform mat4 ModelMatrix; \n"
+    "uniform mat4 ViewMatrix; \n"
+    "uniform mat4 ProjectionMatrix; \n"
+    "uniform mat4 NormalMatrix; \n"
+    "\n"
+    "out vec3 N; \n"
+    "out vec3 v; \n"
+    "\n"
+    "void main() { \n"
+    "   v = (ViewMatrix * ModelMatrix * vec4(position, 1)).xyz; \n"
+    "   N = normalize((NormalMatrix * vec4(normal, 0)).xyz); \n"
+    "   gl_Position	= ProjectionMatrix * ViewMatrix * ModelMatrix * vec4(position, 1); \n"
+    "} \n";
+    s_phongVS = compileShader(vertexShader, GL_VERTEX_SHADER);
+    
+    std::string fragmentShader =
+    "#version 330 \n"
+    "\n"
+    "in vec3 N; \n"
+    "in vec3 v; \n"
+    "\n"
+    "out vec4 fragColor; \n"
+    "\n"
+    "uniform vec3 LightPosition; \n"
+    "uniform vec3 LightIntensityAmbient; \n"
+    "uniform vec3 LightIntensityDiffuse; \n"
+    "uniform vec3 LightIntensitySpecular; \n"
+    "\n"
+    "uniform vec3 MatReflectanceAmbient; \n"
+    "uniform vec3 MatReflectanceDiffuse; \n"
+    "uniform vec3 MatReflectanceSpecular; \n"
+    "uniform float MatReflectanceShininess; \n"
+    "\n"
+    "void main() { \n"
+    "   vec3 L = normalize(LightPosition - v); \n"
+    "   vec3 V = normalize(-v); // eye is at (0,0,0) \n"
+    "   vec3 R = normalize(-reflect(L,N));"
+    "\n"
+    "   vec3 Ia = MatReflectanceAmbient * LightIntensityAmbient; \n"
+    "\n"
+    "   vec3 Id = clamp(MatReflectanceDiffuse * LightIntensityDiffuse * max(dot(N, L), 0.0), 0.0, 1.0); \n"
+    "\n"
+    "   vec3 Is = MatReflectanceSpecular * LightIntensitySpecular * pow(max(dot(R, V), 0.0), MatReflectanceShininess); \n"
+    "   Is = clamp(Is, 0.0, 1.0);"
+    "\n"
+    "   fragColor.rgb = Ia + Id + Is; \n"
+    "   fragColor.a = 1.0; \n"
+    "} \n";
+    s_phongFS = compileShader(fragmentShader, GL_FRAGMENT_SHADER);
+    
+    s_phongProgram = glCreateProgram();
+    glAttachShader(s_phongProgram, s_phongVS);
+    glAttachShader(s_phongProgram, s_phongFS);
+    
+    glBindAttribLocation(s_phongProgram, 0, "position");
+    glBindAttribLocation(s_phongProgram, 1, "normal");
+    
+    linkShaderProgram(s_phongProgram);
+}
+
 
 void ShaderUtils::startSimplePhongShader(const float *modelMatrix,
                                          const float *viewMatrix,
@@ -152,69 +199,7 @@ void ShaderUtils::startSimplePhongShader(const float *modelMatrix,
                                          const float matReflectanceShininess) {
     // Initialize if first time through
     if (s_phongProgram == 0) {
-        std::string vertexShader =
-        "#version 330 \n"
-        "layout(location = 0) in vec3 position; \n"
-        "layout(location = 1) in vec3 normal; \n"
-        "\n"
-        "uniform mat4 ModelMatrix; \n"
-        "uniform mat4 ViewMatrix; \n"
-        "uniform mat4 ProjectionMatrix; \n"
-        "uniform mat4 NormalMatrix; \n"
-        "\n"
-        "out vec3 N; \n"
-        "out vec3 v; \n"
-        "\n"
-        "void main() { \n"
-        "   v = (ViewMatrix * ModelMatrix * vec4(position, 1)).xyz; \n"
-        "   N = normalize((NormalMatrix * vec4(normal, 0)).xyz); \n"
-        "   gl_Position	= ProjectionMatrix * ViewMatrix * ModelMatrix * vec4(position, 1); \n"
-        "} \n";
-        s_phongVS = compileShader(vertexShader, GL_VERTEX_SHADER);
-        
-        std::string fragmentShader =
-        "#version 330 \n"
-        "\n"
-        "in vec3 N; \n"
-        "in vec3 v; \n"
-        "\n"
-        "out vec4 fragColor; \n"
-        "\n"
-        "uniform vec3 LightPosition; \n"
-        "uniform vec3 LightIntensityAmbient; \n"
-        "uniform vec3 LightIntensityDiffuse; \n"
-        "uniform vec3 LightIntensitySpecular; \n"
-        "\n"
-        "uniform vec3 MatReflectanceAmbient; \n"
-        "uniform vec3 MatReflectanceDiffuse; \n"
-        "uniform vec3 MatReflectanceSpecular; \n"
-        "uniform float MatReflectanceShininess; \n"
-        "\n"
-        "void main() { \n"
-        "   vec3 L = normalize(LightPosition - v); \n"
-        "   vec3 V = normalize(-v); // eye is at (0,0,0) \n"
-        "   vec3 R = normalize(-reflect(L,N));"
-        "\n"
-        "   vec3 Ia = MatReflectanceAmbient * LightIntensityAmbient; \n"
-        "\n"
-        "   vec3 Id = clamp(MatReflectanceDiffuse * LightIntensityDiffuse * max(dot(N, L), 0.0), 0.0, 1.0); \n"
-        "\n"
-        "   vec3 Is = MatReflectanceSpecular * LightIntensitySpecular * pow(max(dot(R, V), 0.0), MatReflectanceShininess); \n"
-        "   Is = clamp(Is, 0.0, 1.0);"
-        "\n"
-        "   fragColor.rgb = Ia + Id + Is; \n"
-        "   fragColor.a = 1.0; \n"
-        "} \n";
-        s_phongFS = compileShader(fragmentShader, GL_FRAGMENT_SHADER);
-        
-        s_phongProgram = glCreateProgram();
-        glAttachShader(s_phongProgram, s_phongVS);
-        glAttachShader(s_phongProgram, s_phongFS);
-        
-        glBindAttribLocation(s_phongProgram, 0, "position");
-        glBindAttribLocation(s_phongProgram, 1, "normal");
-        
-        linkShaderProgram(s_phongProgram);
+        init();
     }
     
     // This is the one place in this QuickShapes / ShaderUtils code with a
@@ -277,8 +262,6 @@ void ShaderUtils::deleteSimpleShaders() {
 
 
 
-
-
 // Helper datastructure for building shapes algorithmically
 class Vertex {
 public:
@@ -294,14 +277,228 @@ public:
 };
 
 
+QuickShapes::QuickShapes() {
+    s_lightPos[0] = 0.0;
+    s_lightPos[1] = 10.0;
+    s_lightPos[2] = 0.0;
+    
+    s_lightAmb[0] = 0.2;
+    s_lightAmb[1] = 0.2;
+    s_lightAmb[2] = 0.2;
+    
+    s_lightDiff[0] = 0.7;
+    s_lightDiff[1] = 0.7;
+    s_lightDiff[2] = 0.7;
+    
+    s_lightSpec[0] = 0.6;
+    s_lightSpec[1] = 0.6;
+    s_lightSpec[2] = 0.6;
+    
+    s_matSpec[0] = 0.6;
+    s_matSpec[1] = 0.6;
+    s_matSpec[2] = 0.6;
+    
+    s_matShin = 10.0;
 
+    s_cubeVAO = 0;
+    s_cubeVBO = 0;
+
+    s_cylVAO = 0;
+    s_cylVBO = 0;
+    s_cylNVerts = 0;
+
+    s_sphVAO = 0;
+    s_sphVBO = 0;
+    s_sphNVerts = 0;
+
+    s_brushVAO = 0;
+    s_brushVBO = 0;
+
+    s_cubbieVAO = 0;
+    s_cubbieVBO = 0;
+}
+
+
+QuickShapes::~QuickShapes() {
+    freeGPUMemory();
+}
+
+
+/// Compiles shader
+GLuint compileShader(const std::string& shaderText, GLuint shaderType) {
+    const char* source = shaderText.c_str();
+    int length = shaderText.size();
+    GLuint shader = glCreateShader(shaderType);
+    glShaderSource(shader, 1, &source, &length);
+    glCompileShader(shader);
+    GLint status;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+    if(status == GL_FALSE) {
+        GLint length;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+        std::vector<char> log(length);
+        glGetShaderInfoLog(shader, length, &length, &log[0]);
+        std::cerr << &log[0];
+    }
+    
+    return shader;
+}
+
+/// links shader program
+void linkShaderProgram(GLuint shaderProgram) {
+    glLinkProgram(shaderProgram);
+    GLint status;
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &status);
+    if(status == GL_FALSE) {
+        GLint length;
+        glGetProgramiv(shaderProgram, GL_INFO_LOG_LENGTH, &length);
+        std::vector<char> log(length);
+        glGetProgramInfoLog(shaderProgram, length, &length, &log[0]);
+        std::cerr << "Error compiling program: " << &log[0] << std::endl;
+    }
+}
+
+
+void QuickShapes::init() {
+    // Create VBO
+    GLfloat vertices[]  = { 1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 1.0f,  -1.0f,-1.0f, 1.0f,      // v0-v1-v2 (front)
+        -1.0f,-1.0f, 1.0f,   1.0f,-1.0f, 1.0f,   1.0f, 1.0f, 1.0f,      // v2-v3-v0
+        
+        1.0f, 1.0f, 1.0f,   1.0f,-1.0f, 1.0f,   1.0f,-1.0f,-1.0f,      // v0-v3-v4 (right)
+        1.0f,-1.0f,-1.0f,   1.0f, 1.0f,-1.0f,   1.0f, 1.0f, 1.0f,      // v4-v5-v0
+        
+        1.0f, 1.0f, 1.0f,   1.0f, 1.0f,-1.0f,  -1.0f, 1.0f,-1.0f,      // v0-v5-v6 (top)
+        -1.0f, 1.0f,-1.0f,  -1.0f, 1.0f, 1.0f,   1.0f, 1.0f, 1.0f,      // v6-v1-v0
+        
+        -1.0f, 1.0f, 1.0f,  -1.0f, 1.0f,-1.0f,  -1.0f,-1.0f,-1.0f,      // v1-v6-v7 (left)
+        -1.0f,-1.0f,-1.0f,  -1.0f,-1.0f, 1.0f,  -1.0f, 1.0f, 1.0f,      // v7-v2-v1.0
+        
+        -1.0f,-1.0f,-1.0f,   1.0f,-1.0f,-1.0f,   1.0f,-1.0f, 1.0f,      // v7-v4-v3 (bottom)
+        1.0f,-1.0f, 1.0f,  -1.0f,-1.0f, 1.0f,  -1.0f,-1.0f,-1.0f,      // v3-v2-v7
+        
+        1.0f,-1.0f,-1.0f,  -1.0f,-1.0f,-1.0f,  -1.0f, 1.0f,-1.0f,      // v4-v7-v6 (back)
+        -1.0f, 1.0f,-1.0f,   1.0f, 1.0f,-1.0f,   1.0f,-1.0f,-1.0f };    // v6-v5-v4
+    
+    // normal array
+    GLfloat normals[]   = { 0, 0, 1,   0, 0, 1,   0, 0, 1,      // v0-v1-v2 (front)
+        0, 0, 1,   0, 0, 1,   0, 0, 1,      // v2-v3-v0
+        
+        1, 0, 0,   1, 0, 0,   1, 0, 0,      // v0-v3-v4 (right)
+        1, 0, 0,   1, 0, 0,   1, 0, 0,      // v4-v5-v0
+        
+        0, 1, 0,   0, 1, 0,   0, 1, 0,      // v0-v5-v6 (top)
+        0, 1, 0,   0, 1, 0,   0, 1, 0,      // v6-v1-v0
+        
+        -1, 0, 0,  -1, 0, 0,  -1, 0, 0,      // v1-v6-v7 (left)
+        -1, 0, 0,  -1, 0, 0,  -1, 0, 0,      // v7-v2-v1
+        
+        0,-1, 0,   0,-1, 0,   0,-1, 0,      // v7-v4-v3 (bottom)
+        0,-1, 0,   0,-1, 0,   0,-1, 0,      // v3-v2-v7
+        
+        0, 0,-1,   0, 0,-1,   0, 0,-1,      // v4-v7-v6 (back)
+        0, 0,-1,   0, 0,-1,   0, 0,-1 };    // v6-v5-v4
+    
+    // color array
+    GLfloat colors[]    = { 1, 1, 1,   1, 1, 0,   1, 0, 0,      // v0-v1-v2 (front)
+        1, 0, 0,   1, 0, 1,   1, 1, 1,      // v2-v3-v0
+        
+        1, 1, 1,   1, 0, 1,   0, 0, 1,      // v0-v3-v4 (right)
+        0, 0, 1,   0, 1, 1,   1, 1, 1,      // v4-v5-v0
+        
+        1, 1, 1,   0, 1, 1,   0, 1, 0,      // v0-v5-v6 (top)
+        0, 1, 0,   1, 1, 0,   1, 1, 1,      // v6-v1-v0
+        
+        1, 1, 0,   0, 1, 0,   0, 0, 0,      // v1-v6-v7 (left)
+        0, 0, 0,   1, 0, 0,   1, 1, 0,      // v7-v2-v1
+        
+        0, 0, 0,   0, 0, 1,   1, 0, 1,      // v7-v4-v3 (bottom)
+        1, 0, 1,   1, 0, 0,   0, 0, 0,      // v3-v2-v7
+        
+        0, 0, 1,   0, 0, 0,   0, 1, 0,      // v4-v7-v6 (back)
+        0, 1, 0,   0, 1, 1,   0, 0, 1 };    // v6-v5-v4
+    
+    // Allocate space and send Vertex Data
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices)+sizeof(normals)+sizeof(colors), 0, GL_STATIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    glBufferSubData(GL_ARRAY_BUFFER, sizeof(vertices), sizeof(normals), normals);
+    glBufferSubData(GL_ARRAY_BUFFER, sizeof(vertices)+sizeof(normals), sizeof(colors), colors);
+    
+    // Create vao
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(GLfloat), (char*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3*sizeof(GLfloat), (char*)0 + sizeof(vertices));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(GLfloat), (char*)0 + sizeof(vertices) + sizeof(normals));
+    
+    // Create shader
+    std::string vertexShader =
+    "#version 330 \n"
+    "layout(location = 0) in vec3 position; "
+    "layout(location = 1) in vec3 normal; "
+    "layout(location = 2) in vec3 color; "
+    ""
+    "uniform mat4 ProjectionMatrix; "
+    "uniform mat4 ViewMatrix; "
+    "uniform mat4 ModelMatrix; "
+    "uniform mat4 NormalMatrix; "
+    ""
+    "out vec3 col;"
+    ""
+    "void main() { "
+    "	gl_Position = ProjectionMatrix*ViewMatrix*ModelMatrix*vec4(position, 1.0); "
+    "	col = color;"
+    "}";
+    vshader = compileShader(vertexShader, GL_VERTEX_SHADER);
+    
+    std::string fragmentShader =
+    "#version 330 \n"
+    "in vec3 col;"
+    "out vec4 colorOut;"
+    ""
+    "void main() { "
+    "	colorOut = vec4(col, 1.0); "
+    "}";
+    fshader = compileShader(fragmentShader, GL_FRAGMENT_SHADER);
+    
+    // Create shader program
+    shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vshader);
+    glAttachShader(shaderProgram, fshader);
+    linkShaderProgram(shaderProgram);
+}
+
+void QuickShapes::draw(const float *modelMatrix, const float *viewMatrix,
+                       const float *projectionMatrix) {
+    // Set shader parameters
+    glUseProgram(shaderProgram);
+    GLint loc = glGetUniformLocation(shaderProgram, "ProjectionMatrix");
+    glUniformMatrix4fv(loc, 1, GL_FALSE, projectionMatrix);
+    loc = glGetUniformLocation(shaderProgram, "ViewMatrix");
+    glUniformMatrix4fv(loc, 1, GL_FALSE, viewMatrix);
+    loc = glGetUniformLocation(shaderProgram, "ModelMatrix");
+    glUniformMatrix4fv(loc, 1, GL_FALSE, modelMatrix);
+    
+    // Draw cube
+    glBindVertexArray(vao);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+    
+    // reset program
+    glUseProgram(0);
+}
 
 
 // ------------  CUBE  ------------
 
 
 void QuickShapes::initCube() {
-	GLfloat vertices[]  = { 
+	GLfloat vertices[]  = {
 		 1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 1.0f,  -1.0f,-1.0f, 1.0f,      // v0-v1-v2 (front)
 		-1.0f,-1.0f, 1.0f,   1.0f,-1.0f, 1.0f,   1.0f, 1.0f, 1.0f,      // v2-v3-v0
 
@@ -775,6 +972,154 @@ void QuickShapes::drawBrush(const float *modelMatrix, const float *viewMatrix,
 
 
 
+
+
+
+
+
+// ------------  CUBBIE  ------------
+
+
+void QuickShapes::initCubbie() {
+    GLfloat vertices[]  = {
+        // Outer Box
+         1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 1.0f,  -1.0f,-1.0f, 1.0f,      // v0-v1-v2 (front)
+        -1.0f,-1.0f, 1.0f,   1.0f,-1.0f, 1.0f,   1.0f, 1.0f, 1.0f,      // v2-v3-v0
+        
+         1.0f, 1.0f, 1.0f,   1.0f,-1.0f, 1.0f,   1.0f,-1.0f,-1.0f,      // v0-v3-v4 (right)
+         1.0f,-1.0f,-1.0f,   1.0f, 1.0f,-1.0f,   1.0f, 1.0f, 1.0f,      // v4-v5-v0
+        
+        -1.0f, 1.0f, 1.0f,  -1.0f, 1.0f,-1.0f,  -1.0f,-1.0f,-1.0f,      // v1-v6-v7 (left)
+        -1.0f,-1.0f,-1.0f,  -1.0f,-1.0f, 1.0f,  -1.0f, 1.0f, 1.0f,      // v7-v2-v1
+        
+        -1.0f,-1.0f,-1.0f,   1.0f,-1.0f,-1.0f,   1.0f,-1.0f, 1.0f,      // v7-v4-v3 (bottom)
+         1.0f,-1.0f, 1.0f,  -1.0f,-1.0f, 1.0f,  -1.0f,-1.0f,-1.0f,      // v3-v2-v7
+        
+         1.0f,-1.0f,-1.0f,  -1.0f,-1.0f,-1.0f,  -1.0f, 1.0f,-1.0f,      // v4-v7-v6 (back)
+        -1.0f, 1.0f,-1.0f,   1.0f, 1.0f,-1.0f,   1.0f,-1.0f,-1.0f,      // v6-v5-v4
+
+        // Inner Box
+        -0.9f,-0.9f, 0.9f,  -0.9f, 1.0f, 0.9f,   0.9f, 1.0f, 0.9f,      // v8-v9-v10 (front)
+         0.9f, 1.0f, 0.9f,   0.9f,-0.9f, 0.9f,  -0.9f,-0.9f, 0.9f,      // v10-v11-v8
+        
+         0.9f,-0.9f,-0.9f,   0.9f,-0.9f, 0.9f,   0.9f, 1.0f, 0.9f,      // v8-v11-v12 (right)
+         0.9f, 1.0f, 0.9f,   0.9f, 1.0f,-0.9f,   0.9f,-0.9f,-0.9f,      // v12-v13-v8
+        
+        -0.9f,-0.9f,-0.9f,  -0.9f, 1.0f,-0.9f,  -0.9f, 1.0f, 0.9f,      // v9-v14-v15 (left)
+        -0.9f, 1.0f, 0.9f,  -0.9f,-0.9f, 0.9f,  -0.9f,-0.9f,-0.9f,      // v15-v10-v9
+        
+         0.9f,-0.9f, 0.9f,   0.9f,-0.9f,-0.9f,  -0.9f,-0.9f,-0.9f,      // v15-v12-v11 (bottom)
+        -0.9f,-0.9f,-0.9f,  -0.9f,-0.9f, 0.9f,   0.9f,-0.9f, 0.9f,      // v11-v10-v15
+        
+        -0.9f, 1.0f,-0.9f,  -0.9f,-0.9f,-0.9f,   0.9f,-0.9f,-0.9f,      // v12-v15-v14 (back)
+         0.9f,-0.9f,-0.9f,   0.9f, 1.0f,-0.9f,  -0.9f, 1.0f,-0.9f,      // v14-v13-v12
+    
+        // Top Edges
+        // v0-v5 and v10-v13
+        1.0f, 1.0f, 1.0f,   1.0f, 1.0f,-1.0f, 0.9f, 1.0f, 0.9f,  // v0-v5-v10
+        1.0f, 1.0f,-1.0f,  0.9f, 1.0f,-0.9f,  0.9f, 1.0f, 0.9f, // v5-v13-v10
+        
+        
+        // v5-v6 and v13-v14
+        1.0f, 1.0f,-1.0f,  -1.0f, 1.0f,-1.0f,  0.9f, 1.0f,-0.9f, // v5-v6-v13
+        -1.0f, 1.0f,-1.0f,   -0.9f, 1.0f,-0.9f, 0.9f, 1.0f,-0.9f, // v6-v14-v13
+        
+        
+        // v6-v1 and v14-v9
+        -1.0f, 1.0f,-1.0f,  -1.0f, 1.0f, 1.0f,   -0.9f, 1.0f,-0.9f, // v6-v1-v14
+         -1.0f, 1.0f, 1.0f,  -0.9f, 1.0f, 0.9f,  -0.9f, 1.0f,-0.9f, // v1-v9-v14
+        
+        // v1-v0 and v9-v8
+        -1.0f, 1.0f, 1.0f,   1.0f, 1.0f, 1.0f, -0.9f, 1.0f, 0.9f, // v1-v0-v9
+         1.0f, 1.0f, 1.0f, 0.9f, 1.0f, 0.9f, -0.9f, 1.0f, 0.9f, // v0-v8-v9
+
+    };
+    
+    GLfloat normals[]   = {
+        // Outer Box
+        0, 0, 1,   0, 0, 1,   0, 0, 1,      // v0-v1-v2 (front)
+        0, 0, 1,   0, 0, 1,   0, 0, 1,      // v2-v3-v0
+        
+        1, 0, 0,   1, 0, 0,   1, 0, 0,      // v0-v3-v4 (right)
+        1, 0, 0,   1, 0, 0,   1, 0, 0,      // v4-v5-v0
+        
+        -1, 0, 0,  -1, 0, 0,  -1, 0, 0,     // v1-v6-v7 (left)
+        -1, 0, 0,  -1, 0, 0,  -1, 0, 0,     // v7-v2-v1
+        
+        0,-1, 0,   0,-1, 0,   0,-1, 0,      // v7-v4-v3 (bottom)
+        0,-1, 0,   0,-1, 0,   0,-1, 0,      // v3-v2-v7
+        
+        0, 0,-1,   0, 0,-1,   0, 0,-1,      // v4-v7-v6 (back)
+        0, 0,-1,   0, 0,-1,   0, 0,-1,      // v6-v5-v4
+
+        // Inner Box
+        0, 0, -1,   0, 0, -1,   0, 0, -1,      // v0-v1-v2 (front)
+        0, 0, -1,   0, 0, -1,   0, 0, -1,      // v2-v3-v0
+        
+        -1, 0, 0,   -1, 0, 0,   -1, 0, 0,      // v0-v3-v4 (right)
+        -1, 0, 0,   -1, 0, 0,   -1, 0, 0,      // v4-v5-v0
+        
+        1, 0, 0,  1, 0, 0,  1, 0, 0,     // v1-v6-v7 (left)
+        1, 0, 0,  1, 0, 0,  1, 0, 0,     // v7-v2-v1
+        
+        0, 1, 0,   0, 1, 0,   0, 1, 0,      // v7-v4-v3 (bottom)
+        0, 1, 0,   0, 1, 0,   0, 1, 0,      // v3-v2-v7
+        
+        0, 0, 1,   0, 0, 1,   0, 0, 1,      // v4-v7-v6 (back)
+        0, 0, 1,   0, 0, 1,   0, 0, 1,      // v6-v5-v4
+        
+        // Top Edges
+        0, 1, 0,   0, 1, 0,   0, 1, 0,
+        0, 1, 0,   0, 1, 0,   0, 1, 0,
+
+        0, 1, 0,   0, 1, 0,   0, 1, 0,
+        0, 1, 0,   0, 1, 0,   0, 1, 0,
+
+        0, 1, 0,   0, 1, 0,   0, 1, 0,
+        0, 1, 0,   0, 1, 0,   0, 1, 0,
+
+        0, 1, 0,   0, 1, 0,   0, 1, 0,
+        0, 1, 0,   0, 1, 0,   0, 1, 0
+    };
+    
+    glGenBuffers(1, &s_cubbieVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, s_cubbieVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices)+sizeof(normals), 0, GL_STATIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    glBufferSubData(GL_ARRAY_BUFFER, sizeof(vertices), sizeof(normals), normals);
+    
+    glGenVertexArrays(1, &s_cubbieVAO);
+    glBindVertexArray(s_cubbieVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, s_cubbieVBO);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(GLfloat), (char*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3*sizeof(GLfloat), (char*)0 + sizeof(vertices));
+    glBindVertexArray(0);
+}
+
+
+void QuickShapes::drawCubbie(const float *modelMatrix, const float *viewMatrix,
+                             const float *projectionMatrix, const float *color) {
+    if (s_cubbieVAO == 0) {
+        initCubbie();
+    }
+    
+    ShaderUtils::startSimplePhongShader(modelMatrix, viewMatrix, projectionMatrix,
+                                        s_lightPos, s_lightAmb, s_lightDiff, s_lightSpec,
+                                        color, color, s_matSpec, s_matShin);
+    
+    glBindVertexArray(s_cubbieVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 84);
+    glBindVertexArray(0);
+    
+    ShaderUtils::stopSimpleShader();
+}
+
+
+
+
+// ----------------
 
 
 
