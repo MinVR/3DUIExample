@@ -29,12 +29,12 @@ UIExample::UIExample(int argc, char** argv) : VRApp(argc, argv),
     _paintingToRoom(glm::mat4(1.0))
 {
     // Desktop mode
-    _rHandTrackerEvents.insert("FakeTracker1_Move");
-    _lHandTrackerEvents.insert("FakeTracker2_Move");
-    _paintOnEvents.insert("KbdSpace_Down");
-    _paintOffEvents.insert("KbdSpace_Up");
-    _grabOnEvents.insert("KbdG_Down");
-    _grabOffEvents.insert("KbdG_Up");
+    _rHandTrackerEvents.insert("RHandTracker_Move");
+    _lHandTrackerEvents.insert("LHandTracker_Move");
+    _paintOnEvents.insert("MouseBtnLeft_Down");
+    _paintOffEvents.insert("MouseBtnLeft_Up");
+    _grabOnEvents.insert("KbdSpace_Down");
+    _grabOffEvents.insert("KbdSpace_Up");
 
     // IV/LAB Cave mode
     _rHandTrackerEvents.insert("RedStylus_Move");
@@ -83,6 +83,10 @@ void UIExample::onButtonUp(const VRButtonEvent &event) {
 
 
 void UIExample::onTrackerMove(const VRTrackerEvent &event) {
+    
+    //std::cout << event.getName() << " "
+    //  << event.getPos()[0] << " " << event.getPos()[1] << " " << event.getPos()[2] << std::endl;
+    
     if (_rHandTrackerEvents.find(event.getName()) != _rHandTrackerEvents.end()) {
         _rhand = glm::make_mat4(event.getTransform());
         if (_painting) {
@@ -138,7 +142,6 @@ void UIExample::onRenderGraphicsContext(const VRGraphicsState &renderState) {
         glClearDepth(1.0f);
         glDepthFunc(GL_LEQUAL);
         glClearColor(0.2, 0.2, 0.2, 1);
-        _quickShapes->init();
     }
 }
 

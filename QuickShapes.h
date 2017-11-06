@@ -55,11 +55,6 @@ public:
     QuickShapes();
     virtual ~QuickShapes();
     
-    GLuint vbo, vao, vshader, fshader, shaderProgram;
-    void init();
-    void draw(const float *modelMatrix, const float *viewMatrix,
-              const float *projectionMatrix);
-    
 
 	/** Draws a cube with extents -1 to 1 given the model, view, and projection 
         matrices provided and using the supplied color as a material property.
